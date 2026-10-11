@@ -66,6 +66,23 @@ jobs:
           echo "CACHE_KEY=$KEY" >> $GITHUB_ENV
           echo "SDK=$SDK CACHE_KEY=$KEY"; nproc; df -h /c /d || true
 
+      - name: ATL for the 14.44 toolset
+        # The runner image ships ATL only for its newest toolset; breakpad needs it for 14.44.
+        shell: pwsh
+        run: |
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+          $vs = & "$installer\vswhere.exe" -latest -property installationPath
+          $p = Start-Process "$installer\vs_installer.exe" -Wait -PassThru -ArgumentList `
+            'modify', '--installPath', "`"$vs`"", `
+            '--add', 'Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL', `
+            '--quiet', '--norestart', '--nocache'
+          "vs_installer exit code: $($p.ExitCode)"
+          Get-ChildItem "$vs\VC\Tools\MSVC" -Directory | ForEach-Object {
+            "$($_.Name): atlbase.h=" + (Test-Path "$($_.FullName)\atlmfc\include\atlbase.h") }
+          $ok = Get-ChildItem "$vs\VC\Tools\MSVC" -Directory -Filter '14.44.*' |
+            Where-Object { Test-Path "$($_.FullName)\atlmfc\include\atlbase.h" }
+          if (-not $ok) { Write-Error "ATL for 14.44 is not installed"; exit 1 }
+
       - uses: Eden-CI/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223
         with:
           arch: x64
@@ -205,6 +222,23 @@ jobs:
           sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
           KEY="$( (sha256sum "$TBUILD/tdesktop/Telegram/build/prepare/prepare.py" | awk '{print $1}'; echo "$SDK") | sha256sum | awk '{print $1}')"
           echo "CACHE_KEY=$KEY" >> $GITHUB_ENV
+
+      - name: ATL for the 14.44 toolset
+        # The runner image ships ATL only for its newest toolset; breakpad needs it for 14.44.
+        shell: pwsh
+        run: |
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+          $vs = & "$installer\vswhere.exe" -latest -property installationPath
+          $p = Start-Process "$installer\vs_installer.exe" -Wait -PassThru -ArgumentList `
+            'modify', '--installPath', "`"$vs`"", `
+            '--add', 'Microsoft.VisualStudio.Component.VC.14.44.17.14.ATL', `
+            '--quiet', '--norestart', '--nocache'
+          "vs_installer exit code: $($p.ExitCode)"
+          Get-ChildItem "$vs\VC\Tools\MSVC" -Directory | ForEach-Object {
+            "$($_.Name): atlbase.h=" + (Test-Path "$($_.FullName)\atlmfc\include\atlbase.h") }
+          $ok = Get-ChildItem "$vs\VC\Tools\MSVC" -Directory -Filter '14.44.*' |
+            Where-Object { Test-Path "$($_.FullName)\atlmfc\include\atlbase.h" }
+          if (-not $ok) { Write-Error "ATL for 14.44 is not installed"; exit 1 }
 
       - uses: Eden-CI/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223
         with:
