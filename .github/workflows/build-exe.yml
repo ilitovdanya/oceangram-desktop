@@ -1,0 +1,294 @@
+name: Build OceanGram Desktop
+
+# Two jobs, because building the libraries (Qt, WebRTC, FFmpeg...) from source
+# can take most of a job's 6-hour limit. The libraries job saves what it built
+# even when it runs out of time, so re-running the workflow continues from there.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['patch/**', 'installer/**', '.github/workflows/build-exe.yml']
+
+concurrency:
+  group: exe-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_REPO: https://github.com/iamxvbaba/gramsrv-tdesktop.git
+  UPSTREAM_SHA: 80377f03a0f33c80a817a2410344ce3dbb0a9681
+  APP_VERSION: 7.2.9
+  # Telegram Desktop's open CI credentials; the server reads 611335 as TDesktop.
+  API_ID: '611335'
+  API_HASH: d524b414d21f4d37f08684c1df41ac9c
+
+jobs:
+  libs:
+    name: Libraries
+    runs-on: windows-latest
+    timeout-minutes: 355
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Prepare directories
+        run: |
+          mkdir %userprofile%\TBuild\Libraries
+          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
+          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+
+      - name: Clone source
+        run: |
+          git config --global core.longpaths true
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+          git init -q %TBUILD%\tdesktop
+          cd /d %TBUILD%\tdesktop
+          git remote add origin %UPSTREAM_REPO%
+          git fetch -q --depth 1 origin %UPSTREAM_SHA% || exit /b 1
+          git checkout -q FETCH_HEAD || exit /b 1
+          git submodule update --init --recursive --depth 1 --jobs 8 || git submodule update --init --recursive --jobs 8 || exit /b 1
+
+      - name: Cache key and MSVC tweaks
+        shell: bash
+        run: |
+          DOC="$TBUILD/tdesktop/docs/building-win.md"
+          SDK="$(grep "SDK version" "$DOC" | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
+          echo "SDK=$SDK" >> $GITHUB_ENV
+          sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          KEY="$( (sha256sum "$TBUILD/tdesktop/Telegram/build/prepare/prepare.py" | awk '{print $1}'; echo "$SDK") | sha256sum | awk '{print $1}')"
+          echo "CACHE_KEY=$KEY" >> $GITHUB_ENV
+          echo "SDK=$SDK CACHE_KEY=$KEY"; nproc; df -h /c /d || true
+
+      - uses: Eden-CI/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223
+        with:
+          arch: x64
+          sdk: ${{ env.SDK }}
+          toolset: '14.44'
+
+      - name: NuGet sources
+        run: |
+          nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
+          nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
+
+      - name: Restore ThirdParty
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: thirdparty-${{ env.CACHE_KEY }}-${{ github.run_id }}
+          restore-keys: thirdparty-${{ env.CACHE_KEY }}-
+
+      - name: Restore libraries
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\*
+            !${{ env.LibrariesPath }}\cache_keys
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: libs-${{ env.CACHE_KEY }}-${{ github.run_id }}
+          restore-keys: libs-${{ env.CACHE_KEY }}-
+
+      - name: Restore Qt
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: qt-${{ env.CACHE_KEY }}-${{ github.run_id }}
+          restore-keys: qt-${{ env.CACHE_KEY }}-
+
+      - name: Remember finished stages
+        id: before
+        shell: bash
+        run: echo "keys=$(find "$LibrariesPath/cache_keys" "$TBUILD/ThirdParty/cache_keys" -type f -exec sha1sum {} + 2>/dev/null | sort | sha1sum | cut -c1-40)" >> $GITHUB_OUTPUT
+
+      - name: Build libraries
+        id: prep
+        continue-on-error: true
+        timeout-minutes: 300
+        run: call %TBUILD%\tdesktop\Telegram\build\prepare\win.bat silent
+
+      - name: Anything built?
+        id: after
+        if: always()
+        shell: bash
+        run: |
+          now="$(find "$LibrariesPath/cache_keys" "$TBUILD/ThirdParty/cache_keys" -type f -exec sha1sum {} + 2>/dev/null | sort | sha1sum | cut -c1-40)"
+          echo "changed=$([ "$now" != "${{ steps.before.outputs.keys }}" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      - name: Drop build leftovers
+        if: always() && steps.after.outputs.changed == 'true'
+        shell: bash
+        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path '*/nv-codec-headers/*' ')' -type f ')' -o -empty ')' -delete; du -sh "$LibrariesPath" "$TBUILD/ThirdParty" || true
+
+      - name: Save ThirdParty
+        if: always() && steps.after.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: thirdparty-${{ env.CACHE_KEY }}-${{ github.run_id }}
+
+      - name: Save libraries
+        if: always() && steps.after.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\*
+            !${{ env.LibrariesPath }}\cache_keys
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: libs-${{ env.CACHE_KEY }}-${{ github.run_id }}
+
+      - name: Save Qt
+        if: always() && steps.after.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: qt-${{ env.CACHE_KEY }}-${{ github.run_id }}
+
+      - name: Libraries incomplete
+        if: steps.prep.outcome != 'success'
+        run: |
+          echo Libraries are not finished. Progress is saved; run the workflow again to continue.
+          exit /b 1
+
+  app:
+    name: OceanGram.exe
+    needs: libs
+    runs-on: windows-latest
+    timeout-minutes: 300
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Prepare directories
+        run: |
+          mkdir %userprofile%\TBuild\Libraries
+          mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
+          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
+          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+
+      - uses: actions/checkout@v4
+        with:
+          path: oceangram
+
+      - name: Clone source
+        run: |
+          git config --global core.longpaths true
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+          git init -q %TBUILD%\tdesktop
+          cd /d %TBUILD%\tdesktop
+          git remote add origin %UPSTREAM_REPO%
+          git fetch -q --depth 1 origin %UPSTREAM_SHA% || exit /b 1
+          git checkout -q FETCH_HEAD || exit /b 1
+          git submodule update --init --recursive --depth 1 --jobs 8 || git submodule update --init --recursive --jobs 8 || exit /b 1
+
+      - name: Cache key and MSVC tweaks
+        shell: bash
+        run: |
+          DOC="$TBUILD/tdesktop/docs/building-win.md"
+          SDK="$(grep "SDK version" "$DOC" | sed -r 's/.*\*\*(.*)\*\* SDK version.*/\1/')"
+          echo "SDK=$SDK" >> $GITHUB_ENV
+          sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/${_Zi}//' "$PROGRAMFILES"/CMake/share/cmake*/Modules/Platform/Windows-MSVC.cmake
+          KEY="$( (sha256sum "$TBUILD/tdesktop/Telegram/build/prepare/prepare.py" | awk '{print $1}'; echo "$SDK") | sha256sum | awk '{print $1}')"
+          echo "CACHE_KEY=$KEY" >> $GITHUB_ENV
+
+      - uses: Eden-CI/msvc-dev-cmd@1bd71f95d6f3d1b2b3395b335cc63bcdc90cf223
+        with:
+          arch: x64
+          sdk: ${{ env.SDK }}
+          toolset: '14.44'
+
+      - name: NuGet sources
+        run: |
+          nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
+          nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
+
+      - name: Restore ThirdParty
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.TBUILD }}\ThirdParty
+          key: thirdparty-${{ env.CACHE_KEY }}-${{ github.run_id }}
+          restore-keys: thirdparty-${{ env.CACHE_KEY }}-
+          fail-on-cache-miss: true
+
+      - name: Restore libraries
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\*
+            !${{ env.LibrariesPath }}\cache_keys
+            !${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\*
+            !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: libs-${{ env.CACHE_KEY }}-${{ github.run_id }}
+          restore-keys: libs-${{ env.CACHE_KEY }}-
+          fail-on-cache-miss: true
+
+      - name: Restore Qt
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.LibrariesPath }}\[qQ]t[_-]*
+            ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
+          key: qt-${{ env.CACHE_KEY }}-${{ github.run_id }}
+          restore-keys: qt-${{ env.CACHE_KEY }}-
+          fail-on-cache-miss: true
+
+      - name: Check libraries
+        run: call %TBUILD%\tdesktop\Telegram\build\prepare\win.bat silent
+
+      - name: Apply OceanGram patches
+        run: python oceangram\patch\apply.py %TBUILD%\tdesktop
+
+      - name: Build
+        run: |
+          cd /d %TBUILD%\tdesktop\Telegram
+          call configure.bat x64 ^
+            -D TDESKTOP_API_ID=%API_ID% ^
+            -D TDESKTOP_API_HASH=%API_HASH% ^
+            -D CMAKE_CONFIGURATION_TYPES=Release ^
+            -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
+            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
+          if errorlevel 1 exit /b 1
+          cmake --build ..\out --config Release --parallel
+          if errorlevel 1 exit /b 1
+          dir ..\out\Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "$env:TBUILD\tdesktop\out\Release"
+          $dist = "$env:GITHUB_WORKSPACE\dist"
+          $app = "$dist\OceanGram"
+          New-Item -ItemType Directory -Force $app | Out-Null
+          Copy-Item "$out\Telegram.exe" "$app\OceanGram.exe"
+          if (Test-Path "$out\modules") { Copy-Item "$out\modules" "$app\modules" -Recurse }
+          Get-ChildItem $app -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+          (Get-Item "$app\OceanGram.exe").VersionInfo | Format-List ProductName, FileDescription, ProductVersion
+
+          Compress-Archive -Path $app -DestinationPath "$dist\OceanGram-$env:APP_VERSION-portable.zip"
+
+          choco install innosetup --no-progress -y | Out-Null
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc /Qp "/DAppVersion=$env:APP_VERSION" "/DReleasePath=$app" `
+            "/DIconFile=$env:TBUILD\tdesktop\Telegram\Resources\art\icon256.ico" `
+            "/O$dist" oceangram\installer\oceangram.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem $dist -File | ForEach-Object { "{0}  {1:N1} MB  {2}" -f $_.Name, ($_.Length / 1MB), (Get-FileHash $_.FullName).Hash }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OceanGram-${{ env.APP_VERSION }}-windows
+          path: |
+            dist\OceanGram-Setup-*.exe
+            dist\OceanGram-*-portable.zip
+          retention-days: 30
+          compression-level: 0
