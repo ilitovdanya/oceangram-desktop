@@ -38,6 +38,10 @@ jobs:
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
 
+      - uses: actions/checkout@v4
+        with:
+          path: oceangram
+
       - name: Clone source
         run: |
           git config --global core.longpaths true
@@ -49,6 +53,7 @@ jobs:
           git fetch -q --depth 1 origin %UPSTREAM_SHA% || exit /b 1
           git checkout -q FETCH_HEAD || exit /b 1
           git submodule update --init --recursive --depth 1 --jobs 8 || git submodule update --init --recursive --jobs 8 || exit /b 1
+          python %GITHUB_WORKSPACE%\oceangram\patch\prepare_fix.py %TBUILD%\tdesktop || exit /b 1
 
       - name: Cache key and MSVC tweaks
         shell: bash
@@ -189,6 +194,7 @@ jobs:
           git fetch -q --depth 1 origin %UPSTREAM_SHA% || exit /b 1
           git checkout -q FETCH_HEAD || exit /b 1
           git submodule update --init --recursive --depth 1 --jobs 8 || git submodule update --init --recursive --jobs 8 || exit /b 1
+          python %GITHUB_WORKSPACE%\oceangram\patch\prepare_fix.py %TBUILD%\tdesktop || exit /b 1
 
       - name: Cache key and MSVC tweaks
         shell: bash
