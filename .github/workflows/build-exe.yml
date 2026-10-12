@@ -290,11 +290,15 @@ jobs:
 
       - name: Build
         run: |
+          rem C: has about 30 GB free on the runner and D: about 150 GB: keep the build tree on D:.
+          mkdir D:\tdout
+          mklink /J %TBUILD%\tdesktop\out D:\tdout || exit /b 1
           cd /d %TBUILD%\tdesktop\Telegram
           call configure.bat x64 ^
             -D TDESKTOP_API_ID=%API_ID% ^
             -D TDESKTOP_API_HASH=%API_HASH% ^
             -D CMAKE_CONFIGURATION_TYPES=Release ^
+            -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= ^
             -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
             -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
           if errorlevel 1 exit /b 1
