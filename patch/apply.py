@@ -97,6 +97,9 @@ def pem(lines):
 
 resub(DC, r'const char \*kPublicRSAKeys\[\] = \{ ".*?" \};',
       "const char *kPublicRSAKeys[] = { " + ", ".join(pem(k) for k in SERVER_KEYS) + " };", flags=re.S)
+# Two production keys vs one test key: give the production span a dynamic extent,
+# as upstream already does for kBuiltInDcs, so both branches of the ternary agree.
+replace(DC, "\t\t: gsl::make_span(kPublicRSAKeys);", "\t\t: gsl::make_span(kPublicRSAKeys).subspan(0);", 1)
 
 # 2. Name. AppName is also the data folder (%APPDATA%\OceanGram), so the app
 #    never touches a real Telegram Desktop profile on the same PC.
