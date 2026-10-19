@@ -5,7 +5,7 @@ Builds OceanGram for Windows from [iamxvbaba/gramsrv-tdesktop](https://github.co
 
 `patch/apply.py` changes the upstream source:
 
-- server: DC 2 at `31.77.251.231:2398`, no built-in IPv6 addresses;
+- server: DC 2 at `159.194.214.209:2398`, no built-in IPv6 addresses;
 - RSA: the server's current (test) key and the OceanGram key;
 - name OceanGram: window title, file properties, data folder `%APPDATA%\OceanGram`;
 - its own Windows ids (installer AppId, notification AppUserModelID, toast activator, shortcuts), so it

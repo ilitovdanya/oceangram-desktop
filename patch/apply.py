@@ -10,7 +10,7 @@ import pathlib
 import re
 import sys
 
-SERVER_IP = "31.77.251.231"
+SERVER_IP = "159.194.214.209"
 SERVER_PORT = 2398
 APP_NAME = "OceanGram"
 # Installer AppId; also read by the app to tell installed from portable.
