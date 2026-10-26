@@ -7,7 +7,7 @@ name: Build OceanGram Desktop
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, og13]
     paths: ['patch/**', 'installer/**', '.github/workflows/build-exe.yml']
 
 concurrency:
@@ -16,8 +16,8 @@ concurrency:
 
 env:
   UPSTREAM_REPO: https://github.com/iamxvbaba/gramsrv-tdesktop.git
-  UPSTREAM_SHA: 80377f03a0f33c80a817a2410344ce3dbb0a9681
-  APP_VERSION: 7.2.9
+  UPSTREAM_SHA: 270f160c6e5289a33a75b4e1290103fc1cecdd60
+  APP_VERSION: 7.3.1
   # Telegram Desktop's open CI credentials; the server reads 611335 as TDesktop.
   API_ID: '611335'
   API_HASH: d524b414d21f4d37f08684c1df41ac9c
@@ -53,7 +53,6 @@ jobs:
           git fetch -q --depth 1 origin %UPSTREAM_SHA% || exit /b 1
           git checkout -q FETCH_HEAD || exit /b 1
           git submodule update --init --recursive --depth 1 --jobs 8 || git submodule update --init --recursive --jobs 8 || exit /b 1
-          python %GITHUB_WORKSPACE%\oceangram\patch\prepare_fix.py %TBUILD%\tdesktop || exit /b 1
 
       - name: Cache key and MSVC tweaks
         shell: bash
@@ -99,7 +98,9 @@ jobs:
         with:
           path: ${{ env.TBUILD }}\ThirdParty
           key: thirdparty-${{ env.CACHE_KEY }}-${{ github.run_id }}
-          restore-keys: thirdparty-${{ env.CACHE_KEY }}-
+          restore-keys: |
+            thirdparty-${{ env.CACHE_KEY }}-
+            thirdparty-
 
       - name: Restore libraries
         uses: actions/cache/restore@v4
@@ -111,7 +112,9 @@ jobs:
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: libs-${{ env.CACHE_KEY }}-${{ github.run_id }}
-          restore-keys: libs-${{ env.CACHE_KEY }}-
+          restore-keys: |
+            libs-${{ env.CACHE_KEY }}-
+            libs-
 
       - name: Restore Qt
         uses: actions/cache/restore@v4
@@ -120,7 +123,9 @@ jobs:
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: qt-${{ env.CACHE_KEY }}-${{ github.run_id }}
-          restore-keys: qt-${{ env.CACHE_KEY }}-
+          restore-keys: |
+            qt-${{ env.CACHE_KEY }}-
+            qt-
 
       - name: Remember finished stages
         id: before
@@ -211,7 +216,6 @@ jobs:
           git fetch -q --depth 1 origin %UPSTREAM_SHA% || exit /b 1
           git checkout -q FETCH_HEAD || exit /b 1
           git submodule update --init --recursive --depth 1 --jobs 8 || git submodule update --init --recursive --jobs 8 || exit /b 1
-          python %GITHUB_WORKSPACE%\oceangram\patch\prepare_fix.py %TBUILD%\tdesktop || exit /b 1
 
       - name: Cache key and MSVC tweaks
         shell: bash
@@ -256,7 +260,9 @@ jobs:
         with:
           path: ${{ env.TBUILD }}\ThirdParty
           key: thirdparty-${{ env.CACHE_KEY }}-${{ github.run_id }}
-          restore-keys: thirdparty-${{ env.CACHE_KEY }}-
+          restore-keys: |
+            thirdparty-${{ env.CACHE_KEY }}-
+            thirdparty-
           fail-on-cache-miss: true
 
       - name: Restore libraries
@@ -269,7 +275,9 @@ jobs:
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: libs-${{ env.CACHE_KEY }}-${{ github.run_id }}
-          restore-keys: libs-${{ env.CACHE_KEY }}-
+          restore-keys: |
+            libs-${{ env.CACHE_KEY }}-
+            libs-
           fail-on-cache-miss: true
 
       - name: Restore Qt
@@ -279,7 +287,9 @@ jobs:
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: qt-${{ env.CACHE_KEY }}-${{ github.run_id }}
-          restore-keys: qt-${{ env.CACHE_KEY }}-
+          restore-keys: |
+            qt-${{ env.CACHE_KEY }}-
+            qt-
           fail-on-cache-miss: true
 
       - name: Check libraries
