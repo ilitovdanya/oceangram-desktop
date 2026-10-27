@@ -127,5 +127,45 @@ replace(AUM, 'u"Telegram.lnk"_q', f'u"{APP_NAME}.lnk"_q', 2)
 replace("Telegram/SourceFiles/platform/win/windows_toast_activator.h",
         "F11932D3-6110-4BBC-9B02-B2EC07A1BD19", TOAST_ACTIVATOR_CLSID, 2)
 
+
+def insert_after(rel, pattern, make, count=1, flags=0):
+    """After each match of pattern add make(match, newline); newline is the file's own line ending."""
+    def fn(text):
+        nl = "\r\n" if "\r\n" in text else "\n"
+        new, n = re.subn(pattern, lambda m: m.group(0) + make(m, nl), text, flags=flags)
+        if n != count:
+            sys.exit(f"patch: {rel}: expected {count} match(es) of {pattern!r}, found {n}")
+        log.append(f"{rel}: {n}x +after /{pattern}/")
+        return new
+    edit(rel, fn)
+
+
+# 4. OceanGram's own sources (patch/files, same layout as the tdesktop tree) and their CMake entries.
+files = pathlib.Path(__file__).resolve().parent / "files"
+added = []
+for src in sorted(files.rglob("*")):
+    if src.is_file():
+        rel = src.relative_to(files)
+        dst = root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(src.read_bytes())
+        added.append(rel.as_posix())
+log.append("added " + ", ".join(added))
+OG_SOURCES = sorted(p[len("Telegram/SourceFiles/"):] for p in added
+                    if p.startswith("Telegram/SourceFiles/oceangram/") and p.endswith((".cpp", ".h")))
+insert_after("Telegram/CMakeLists.txt", r"\n    wallet/wallet_panel\.h\r?\n",
+             lambda m, nl: "".join(f"    {s}{nl}" for s in OG_SOURCES))
+
+# 5. «Деньги»: sending GRAM to another account goes through the server's ledger (Oceangram::ShowSendGram,
+#    "OGT1" intent in wallet.sendTransfer) instead of the wallet's local signing, which needs a seed phrase
+#    this server never hands out. Balance, history and the chat messages stay the wallet's own.
+WC = "Telegram/SourceFiles/wallet/wallet_content.cpp"
+insert_after(WC, r'#include "wallet/wallet_content\.h"\r?\n', lambda m, nl: f'#include "oceangram/og_money.h"{nl}')
+insert_after(WC, r"void ShowSendToUser\([^{;]*?\) \{\r?\n",
+             lambda m, nl: (f"\tif (!user->isSelf()) {{{nl}"
+                            f"\t\tOceangram::ShowSendGram(show, user, std::move(sent), amountNano);{nl}"
+                            f"\t\treturn;{nl}"
+                            f"\t}}{nl}"), flags=re.S)
+
 print("\n".join(log))
 print("patch: OK")
