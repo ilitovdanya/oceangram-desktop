@@ -17,6 +17,7 @@ OceanGram Desktop: OceanGram Premium and OceanSoft in Settings.
 #include "ui/layers/generic_box.h"
 #include "ui/painter.h"
 #include "ui/rp_widget.h"
+#include "ui/style/style_core_scale.h"
 #include "ui/widgets/checkbox.h"
 #include "ui/widgets/labels.h"
 #include "window/window_session_controller.h"
@@ -48,7 +49,7 @@ public:
 	}
 
 protected:
-	int resizeGetHeight(int newWidth) override {
+	int resizeGetHeight(int) override {
 		return style::ConvertScale(44);
 	}
 

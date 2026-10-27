@@ -85,11 +85,14 @@ struct Cache {
 
 [[nodiscard]] QColor Blend(const QColor &a, const QColor &b, double t) {
 	t = std::clamp(t, 0., 1.);
+	const auto mix = [&](float x, float y) {
+		return float(x + (y - x) * t);
+	};
 	return QColor::fromRgbF(
-		a.redF() + (b.redF() - a.redF()) * t,
-		a.greenF() + (b.greenF() - a.greenF()) * t,
-		a.blueF() + (b.blueF() - a.blueF()) * t,
-		a.alphaF() + (b.alphaF() - a.alphaF()) * t);
+		mix(a.redF(), b.redF()),
+		mix(a.greenF(), b.greenF()),
+		mix(a.blueF(), b.blueF()),
+		mix(a.alphaF(), b.alphaF()));
 }
 
 NameStyle ParseStyleJson(const QJsonObject &json) {
@@ -204,7 +207,7 @@ private:
 
 };
 
-Cache::Cache() : ticker([=] { tick(); }) {
+Cache::Cache() : ticker([this] { tick(); }) {
 }
 
 void Cache::schedule() {
