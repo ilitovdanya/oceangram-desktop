@@ -33,7 +33,10 @@ jobs:
     steps:
       - name: Prepare directories
         run: |
-          mkdir %userprofile%\TBuild\Libraries
+          rem C: has about 30 GB free on the runner and D: about 150 GB; the 7.3.1 libraries (Qt 6.11 in
+          rem Debug and RelWithDebInfo, Rust, WebRTC) fill C:, so the whole tree lives on D:.
+          mkdir D:\TBuild\Libraries
+          mklink /J %userprofile%\TBuild D:\TBuild || exit /b 1
           mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
@@ -196,7 +199,10 @@ jobs:
     steps:
       - name: Prepare directories
         run: |
-          mkdir %userprofile%\TBuild\Libraries
+          rem C: has about 30 GB free on the runner and D: about 150 GB; the 7.3.1 libraries (Qt 6.11 in
+          rem Debug and RelWithDebInfo, Rust, WebRTC) fill C:, so the whole tree lives on D:.
+          mkdir D:\TBuild\Libraries
+          mklink /J %userprofile%\TBuild D:\TBuild || exit /b 1
           mklink /d %GITHUB_WORKSPACE%\TBuild %userprofile%\TBuild
           echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
           echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
