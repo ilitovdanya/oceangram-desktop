@@ -167,5 +167,19 @@ insert_after(WC, r"void ShowSendToUser\([^{;]*?\) \{\r?\n",
                             f"\t\treturn;{nl}"
                             f"\t}}{nl}"), flags=re.S)
 
+# 6. Profile «Баланс: 💎 X ›» pill (Oceangram::AddBalancePill) right under the saved-music pill, as on Android.
+PIW = "Telegram/SourceFiles/info/profile/info_profile_inner_widget.cpp"
+insert_after(PIW, r'#include "info/profile/info_profile_inner_widget\.h"\r?\n',
+             lambda m, nl: f'#include "oceangram/og_balance.h"{nl}')
+insert_after(PIW, r"\t\tAddSavedMusic\(\r?\n\t\t\tresult\.data\(\),\r?\n\t\t\t_controller,\r?\n\t\t\tmusicPeer,\r?\n"
+                  r"\t\t\t_topBarColor\.value\(\)\);\r?\n",
+             lambda m, nl: (f"\t\tif (const auto user = _peer->asUser()) {{{nl}"
+                            f"\t\t\tOceangram::AddBalancePill({nl}"
+                            f"\t\t\t\tresult.data(),{nl}"
+                            f"\t\t\t\t_controller->parentController(),{nl}"
+                            f"\t\t\t\tuser,{nl}"
+                            f"\t\t\t\t_topBarColor.value());{nl}"
+                            f"\t\t}}{nl}"))
+
 print("\n".join(log))
 print("patch: OK")
