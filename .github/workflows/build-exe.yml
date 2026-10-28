@@ -130,6 +130,16 @@ jobs:
             qt-${{ env.CACHE_KEY }}-
             qt-
 
+      - name: Rebuild stages the old prune stripped
+        # The generated wallet engine binding (a .cpp) and the Rust sources were deleted by the prune
+        # while their stage keys stayed, so CMake found no wallet_engine.cpp. Rebuild just those stages.
+        shell: bash
+        run: |
+          if [ -d "$LibrariesPath/tdesktop_rust" ] && [ ! -f "$LibrariesPath/tdesktop_rust/out/src/wallet_engine/wallet_engine.cpp" ]; then
+            rm -f "$LibrariesPath/cache_keys/tlottie" "$LibrariesPath/cache_keys/wallet-engine" "$LibrariesPath/cache_keys/tdesktop_rust"
+            echo "wallet engine binding missing: rebuilding tlottie, wallet-engine, tdesktop_rust"
+          fi
+
       - name: Remember finished stages
         id: before
         shell: bash
@@ -152,7 +162,7 @@ jobs:
       - name: Drop build leftovers
         if: always() && steps.after.outputs.changed == 'true'
         shell: bash
-        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path '*/nv-codec-headers/*' ')' -type f ')' -o -empty ')' -delete; du -sh "$LibrariesPath" "$TBUILD/ThirdParty" || true
+        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path '*/nv-codec-headers/*' -o -path '*/tdesktop_rust/out/*' -o -path '*/tlottie/*' -o -path '*/wallet-engine/*' ')' -type f ')' -o -empty ')' -delete; du -sh "$LibrariesPath" "$TBUILD/ThirdParty" || true
 
       - name: Save ThirdParty
         if: always() && steps.after.outputs.changed == 'true'
