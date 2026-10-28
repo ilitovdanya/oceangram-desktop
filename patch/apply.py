@@ -127,5 +127,33 @@ replace(AUM, 'u"Telegram.lnk"_q', f'u"{APP_NAME}.lnk"_q', 2)
 replace("Telegram/SourceFiles/platform/win/windows_toast_activator.h",
         "F11932D3-6110-4BBC-9B02-B2EC07A1BD19", TOAST_ACTIVATOR_CLSID, 2)
 
+
+def replace_lines(rel, old, new):
+    # Multi-line anchors written with "\n"; the checkout may have CRLF.
+    def fn(text):
+        nl = "\r\n" if "\r\n" in text else "\n"
+        o, n = old.replace("\n", nl), new.replace("\n", nl)
+        if text.count(o) != 1:
+            sys.exit(f"patch: {rel}: expected 1 of {old!r}, found {text.count(o)}")
+        log.append(f"{rel}: 1x {old!r}")
+        return text.replace(o, n)
+    edit(rel, fn)
+
+
+# 4. Anonymous numbers: the profile labels a +888 number (IsCollectiblePhone, by fragment_prefixes)
+#    «Анонимный номер» instead of always «Телефон», like Android and Web. The Russian text is
+#    lng_info_anonymous_number_label in the server's tdesktop lang pack; without it the English default shows.
+replace_lines("Telegram/Resources/langs/lang.strings",
+              '"lng_info_mobile_label" = "Mobile";\n',
+              '"lng_info_mobile_label" = "Mobile";\n'
+              '"lng_info_anonymous_number_label" = "Anonymous Number";\n')
+replace_lines("Telegram/SourceFiles/info/profile/info_profile_actions.cpp",
+              "\t\t\t\ttr::lng_info_mobile_label(),\n"
+              "\t\t\t\tPhoneWithSpoilerValue(user, PhoneOrHiddenValue(user)),\n",
+              "\t\t\t\t(IsCollectiblePhone(user)\n"
+              "\t\t\t\t\t? tr::lng_info_anonymous_number_label()\n"
+              "\t\t\t\t\t: tr::lng_info_mobile_label()),\n"
+              "\t\t\t\tPhoneWithSpoilerValue(user, PhoneOrHiddenValue(user)),\n")
+
 print("\n".join(log))
 print("patch: OK")
