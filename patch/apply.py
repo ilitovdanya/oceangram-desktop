@@ -7,10 +7,12 @@ Every edit checks that its anchor exists, so a changed upstream fails the
 build here instead of producing an EXE that talks to the wrong server.
 """
 import pathlib
+import os
 import re
 import sys
 
-SERVER_IP = "2.26.197.16"
+# workflow_dispatch input server_ip; the old server forwards to the new one after the move, so it is the safe default
+SERVER_IP = os.environ.get("OG_SERVER_IP") or "159.194.214.209"
 SERVER_PORT = 2398
 APP_NAME = "OceanGram"
 # Installer AppId; also read by the app to tell installed from portable.

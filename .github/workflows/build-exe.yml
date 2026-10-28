@@ -6,6 +6,11 @@ name: Build OceanGram Desktop
 
 on:
   workflow_dispatch:
+    inputs:
+      server_ip:
+        description: 'MTProto server IP baked into the app'
+        type: string
+        default: '159.194.214.209'
   push:
     branches: [main, og13]
     paths: ['patch/**', 'installer/**', '.github/workflows/build-exe.yml']
@@ -18,6 +23,7 @@ env:
   UPSTREAM_REPO: https://github.com/iamxvbaba/gramsrv-tdesktop.git
   UPSTREAM_SHA: 270f160c6e5289a33a75b4e1290103fc1cecdd60
   APP_VERSION: 7.3.1
+  OG_SERVER_IP: ${{ inputs.server_ip || '159.194.214.209' }}
   # Telegram Desktop's open CI credentials; the server reads 611335 as TDesktop.
   API_ID: '611335'
   API_HASH: d524b414d21f4d37f08684c1df41ac9c
@@ -207,6 +213,15 @@ jobs:
       run:
         shell: cmd
     steps:
+      # The MSVC precompiled headers of Telegram.vcxproj ran out of virtual memory (C3859/C1076) with the
+      # runner's default page file.
+      - name: Bigger page file
+        uses: al-cheb/configure-pagefile-action@v1.4
+        with:
+          minimum-size: 16GB
+          maximum-size: 32GB
+          disk-root: "D:"
+
       - name: Prepare directories
         run: |
           rem C: has about 30 GB free on the runner and D: about 150 GB; the 7.3.1 libraries (Qt 6.11 in
@@ -328,7 +343,7 @@ jobs:
             -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
             -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
           if errorlevel 1 exit /b 1
-          cmake --build ..\out --config Release --parallel
+          cmake --build ..\out --config Release --parallel 2
           if errorlevel 1 exit /b 1
           dir ..\out\Release
 
