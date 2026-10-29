@@ -102,6 +102,12 @@ resub(DC, r'const char \*kPublicRSAKeys\[\] = \{ ".*?" \};',
 # Two production keys vs one test key: give the production span a dynamic extent,
 # as upstream already does for kBuiltInDcs, so both branches of the ternary agree.
 replace(DC, "\t\t: gsl::make_span(kPublicRSAKeys);", "\t\t: gsl::make_span(kPublicRSAKeys).subspan(0);", 1)
+replace(DC, "\t\tstream.readRawData(ip.data(), ipSize);",
+        "\t\tstream.readRawData(ip.data(), ipSize);\n"
+        '\t\tif (id == 2 && (ip == "159.194.214.209" || ip == "31.77.251.231")) {\n'
+        f'\t\t\tip = "{SERVER_IP}";\n'
+        f'\t\t\tport = {SERVER_PORT};\n'
+        "\t\t}\n", 1)
 
 # 2. Name. AppName is also the data folder (%APPDATA%\OceanGram), so the app
 #    never touches a real Telegram Desktop profile on the same PC.
