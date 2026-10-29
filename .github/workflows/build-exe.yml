@@ -10,7 +10,7 @@ on:
       server_ip:
         description: 'MTProto server IP baked into the app'
         type: string
-        default: '159.194.214.209'
+        default: '2.26.197.16'
   push:
     branches: [main, og13]
     paths: ['patch/**', 'installer/**', '.github/workflows/build-exe.yml']
@@ -20,10 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  UPSTREAM_REPO: https://github.com/iamxvbaba/gramsrv-tdesktop.git
-  UPSTREAM_SHA: 270f160c6e5289a33a75b4e1290103fc1cecdd60
-  APP_VERSION: 7.3.1
-  OG_SERVER_IP: ${{ inputs.server_ip || '159.194.214.209' }}
+  UPSTREAM_REPO: https://github.com/telegramdesktop/tdesktop.git
+  UPSTREAM_SHA: f985723b552b30fe1c17d377d57f44e61a15a8c4
+  APP_VERSION: 7.3.3
+  API_LAYER: '232'
+  OG_SERVER_IP: ${{ inputs.server_ip || '2.26.197.16' }}
   # Telegram Desktop's open CI credentials; the server reads 611335 as TDesktop.
   API_ID: '611335'
   API_HASH: d524b414d21f4d37f08684c1df41ac9c
@@ -329,6 +330,9 @@ jobs:
       - name: Apply OceanGram patches
         run: python oceangram\patch\apply.py %TBUILD%\tdesktop
 
+      - name: Verify protocol and server
+        run: python oceangram\patch\verify_build.py %TBUILD%\tdesktop
+
       - name: Build
         run: |
           rem C: has about 30 GB free on the runner and D: about 150 GB: keep the build tree on D:.
@@ -354,6 +358,7 @@ jobs:
           $dist = "$env:GITHUB_WORKSPACE\dist"
           $app = "$dist\OceanGram"
           New-Item -ItemType Directory -Force $app | Out-Null
+          Copy-Item "$env:TBUILD\tdesktop\oceangram-build.json" "$dist\oceangram-build.json"
           Copy-Item "$out\Telegram.exe" "$app\OceanGram.exe"
           if (Test-Path "$out\modules") { Copy-Item "$out\modules" "$app\modules" -Recurse }
           Get-ChildItem $app -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
@@ -375,5 +380,6 @@ jobs:
           path: |
             dist\OceanGram-Setup-*.exe
             dist\OceanGram-*-portable.zip
+            dist\oceangram-build.json
           retention-days: 30
           compression-level: 0
