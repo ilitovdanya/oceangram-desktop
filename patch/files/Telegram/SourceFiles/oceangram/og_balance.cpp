@@ -26,6 +26,10 @@ OceanGram Desktop: the profile «Баланс» pill.
 #include "styles/style_info.h"
 #include "styles/style_layers.h"
 
+#include <QtGui/QPainterPath>
+
+#include <cmath>
+
 namespace Oceangram {
 namespace {
 
@@ -137,34 +141,17 @@ void BalanceButton::setOverrideBg(std::optional<QColor> color) {
 	update();
 }
 
+// The pill is a centred capsule under the profile status, drawn at 80% of the
+// saved-music row's size (owner's request of 2026-11-12: «на 20 процентов меньше»).
+constexpr auto kPillScale = 0.8;
+
 void BalanceButton::paintEvent(QPaintEvent *e) {
 	auto p = QPainter(this);
-	if (_overrideBg) {
-		p.fillRect(e->rect(), Ui::BlendColors(
-			*_overrideBg,
-			Qt::black,
-			st::infoProfileTopBarActionButtonBgOpacity));
-	} else {
-		p.fillRect(e->rect(), st::shadowFg);
-	}
-	const auto lightBackground = _overrideBg
-		&& Ui::IsLightBackground(*_overrideBg);
-	const auto rippleColor = !_overrideBg
-		? std::nullopt
-		: std::make_optional(anim::with_alpha(
-			(lightBackground
-				? QColor(Qt::black)
-				: st::groupCallMembersFg->c),
-			st::infoProfileTopBarBackdropRippleOpacity));
-	paintRipple(p, QPoint(), rippleColor ? &*rippleColor : nullptr);
+	PainterHighQualityEnabler hq(p);
 
-	const auto fg = !_overrideBg
-		? st::windowBoldFg->c
-		: lightBackground
-		? QColor(Qt::black)
-		: st::groupCallMembersFg->c;
 	const auto &gem = st::tonIconEmoji.icon;
 	const auto &arrow = st::topicButtonArrow;
+	const auto padding = st::infoMusicButtonPadding;
 	const auto skip = st::normalFont->spacew;
 	const auto labelWidth = _label.maxWidth();
 	const auto amountWidth = _amount.maxWidth();
@@ -174,8 +161,66 @@ void BalanceButton::paintEvent(QPaintEvent *e) {
 		+ amountWidth
 		+ skip
 		+ arrow.width();
-	auto left = std::max((width() - total) / 2, 0);
-	const auto textTop = (height() - st::normalFont->height) / 2;
+	// Unscaled capsule, then its on-screen rectangle at kPillScale.
+	const auto pillWidth = padding.left() + total + padding.right();
+	const auto pillHeight = padding.top()
+		+ st::normalFont->height
+		+ padding.bottom();
+	const auto shownWidth = pillWidth * kPillScale;
+	const auto shownHeight = pillHeight * kPillScale;
+	const auto capsule = QRectF(
+		(width() - shownWidth) / 2.,
+		(height() - shownHeight) / 2.,
+		shownWidth,
+		shownHeight);
+	const auto radius = shownHeight / 2.;
+
+	// The row continues the profile's coloured top bar, so the capsule sits in
+	// the header like on the screenshots; without a coloured bar it stays clear.
+	if (_overrideBg) {
+		p.fillRect(e->rect(), *_overrideBg);
+	}
+	p.setPen(Qt::NoPen);
+	p.setBrush(_overrideBg
+		? Ui::BlendColors(
+			*_overrideBg,
+			Qt::black,
+			st::infoProfileTopBarActionButtonBgOpacity)
+		: st::shadowFg->c);
+	p.drawRoundedRect(capsule, radius, radius);
+
+	const auto lightBackground = _overrideBg
+		&& Ui::IsLightBackground(*_overrideBg);
+	const auto rippleColor = !_overrideBg
+		? std::nullopt
+		: std::make_optional(anim::with_alpha(
+			(lightBackground
+				? QColor(Qt::black)
+				: st::groupCallMembersFg->c),
+			st::infoProfileTopBarBackdropRippleOpacity));
+	{
+		// The press ripple stays inside the capsule.
+		auto clip = QPainterPath();
+		clip.addRoundedRect(capsule, radius, radius);
+		p.save();
+		p.setClipPath(clip);
+		paintRipple(p, QPoint(), rippleColor ? &*rippleColor : nullptr);
+		p.restore();
+	}
+
+	const auto fg = !_overrideBg
+		? st::windowBoldFg->c
+		: lightBackground
+		? QColor(Qt::black)
+		: st::groupCallMembersFg->c;
+
+	// Content is laid out at full size inside the unscaled capsule and the
+	// painter scales it down around the capsule's corner.
+	p.translate(capsule.topLeft());
+	p.scale(kPillScale, kPillScale);
+	auto left = padding.left();
+	const auto textTop = padding.top();
+	const auto middle = pillHeight / 2;
 
 	p.setPen(fg);
 	_label.draw(p, {
@@ -185,7 +230,7 @@ void BalanceButton::paintEvent(QPaintEvent *e) {
 		.elisionLines = 1,
 	});
 	left += labelWidth + skip;
-	gem.paint(p, left, (height() - gem.height()) / 2, width(), fg);
+	gem.paint(p, left, middle - gem.height() / 2, pillWidth, fg);
 	left += gem.width();
 	_amount.draw(p, {
 		.position = { left, textTop },
@@ -194,13 +239,15 @@ void BalanceButton::paintEvent(QPaintEvent *e) {
 		.elisionLines = 1,
 	});
 	left += amountWidth + skip;
-	arrow.paint(p, left, (height() - arrow.height()) / 2, width(), fg);
+	arrow.paint(p, left, middle - arrow.height() / 2, pillWidth, fg);
 }
 
 int BalanceButton::resizeGetHeight(int newWidth) {
 	const auto padding = st::infoMusicButtonPadding;
 	const auto &font = st::defaultTextStyle.font;
-	return padding.top() + font->height + padding.bottom();
+	const auto pillHeight = padding.top() + font->height + padding.bottom();
+	// The scaled capsule plus a little air above and below it.
+	return int(std::ceil(pillHeight * kPillScale)) + padding.top();
 }
 
 void AddBalancePill(
